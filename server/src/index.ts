@@ -1,11 +1,13 @@
 import express from 'express';
 import connectDB from './config/db';
 import dotenv from 'dotenv';
-import { IUser, UserModel } from './models/models';
+import { CartModel , ProductModel, UserModel } from './models/models';
 import {z} from "zod"
 import { Request, Response } from 'express';
 import jwt from "jsonwebtoken";
 import bcrypt from "bcrypt";
+import { authenticateToken } from './MiddleWare/auth';
+
 
 dotenv.config();
 const app = express();
@@ -29,7 +31,7 @@ connectDB();
 
 app.post('/users/register', async (req: Request, res: Response): Promise<void> => {
   try {
-    const data : IUser = req.body;
+    const data  = req.body;
     const parsed = registerSchema.safeParse(data);
     if (!parsed.success) {
       res.status(400).json({ error: parsed.error.errors ,
@@ -101,6 +103,102 @@ app.post('/users/login', async (req: Request, res: Response):Promise<void> => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ success: false, message: "Server error" });
+  }
+});
+
+
+
+const router = express.Router();
+
+// Zod Schema for Product validation
+const productSchema = z.object({
+  name: z.string().min(1),
+  description: z.string().min(1),
+  brand: z.string().min(1),
+  category: z.string().min(1),
+  price: z.number().nonnegative(),
+  stock: z.number().int().nonnegative(),
+  color: z.string().min(1),
+  size: z.string().min(1),
+  imageUrl: z.string().url(),
+  tags: z.array(z.string()).optional()
+});
+
+// Route: POST /products
+
+// added the middleware to protect the router and verfiy the token 
+app.use(authenticateToken)
+router.post('/product', async (req: Request, res: Response): Promise<void> => {
+  const parsed = productSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({
+      status: false,
+      message: 'Invalid product data',
+      errors: parsed.error.errors,
+    });
+    return;
+  }
+
+  try {
+    const product = await ProductModel.create(parsed.data);
+    res.status(201).json({
+      status: true,
+      message: 'Product added successfully',
+      data: product,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      status: false,
+      message: 'Server error while adding product',
+    });
+  }
+});
+
+// delete the product 
+router.post('/', authenticateToken, async (req: Request, res: Response) => {
+  const parsed = productSchema.safeParse(req.body);
+
+  if (!parsed.success) {
+    res.status(400).json({
+      status: false,
+      message: 'Invalid product data',
+      errors: parsed.error.errors,
+    });
+    return;
+  }
+
+  try {
+    const product = await ProductModel.create(parsed.data);
+    res.status(201).json({
+      status: true,
+      message: 'Product added successfully',
+      data: product,
+    });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({
+      status: false,
+      message: 'Server error while adding product',
+    });
+  }
+});
+
+// Delete product by id - protected route
+router.delete('/:id', authenticateToken, async (req: Request, res: Response) => {
+  const { id } = req.params;
+  try {
+    const deleted = await ProductModel.findByIdAndDelete(id);
+    if (!deleted) {
+      res.status(404).json({ status: false, message: 'Product not found' });
+      return;
+    }
+
+    res.status(200).json({ status: true, message: 'Product deleted successfully' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ status: false, message: 'Server error while deleting product' });
   }
 });
 
